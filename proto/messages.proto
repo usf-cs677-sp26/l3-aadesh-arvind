@@ -22,6 +22,7 @@ message Response {
 message RetrievalResponse {
     Response resp = 1;
     uint64 size = 2;
+    bytes checksum = 3;
 }
 
 message Wrapper {

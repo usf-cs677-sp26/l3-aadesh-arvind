@@ -1,5 +1,5 @@
 module file-transfer
 
-go 1.19
+go 1.23
 
-require google.golang.org/protobuf v1.28.1
+require google.golang.org/protobuf v1.36.11
