@@ -55,7 +55,7 @@ func get(msgHandler *messages.MessageHandler, fileName string, destDir string) i
 	destPath := filepath.Join(destDir, filepath.Base(fileName))
 
 	msgHandler.SendRetrievalRequest(fileName)
-	ok, _, size, serverChecksum := msgHandler.ReceiveRetrievalResponse()
+	ok, _, size := msgHandler.ReceiveRetrievalResponse()
 	if !ok {
 		return 1
 	}
@@ -72,8 +72,10 @@ func get(msgHandler *messages.MessageHandler, fileName string, destDir string) i
 	io.CopyN(w, msgHandler, int64(size))
 	file.Close()
 
-	// Verify checksum against what the server sent upfront
+	// Receive checksum from server and verify
 	clientChecksum := hash.Sum(nil)
+	checkMsg, _ := msgHandler.Receive()
+	serverChecksum := checkMsg.GetChecksum().Checksum
 	if util.VerifyChecksum(serverChecksum, clientChecksum) {
 		fmt.Println("Successfully retrieved file.")
 	} else {

@@ -71,29 +71,25 @@ func handleRetrieval(msgHandler *messages.MessageHandler, request *messages.Retr
 	info, err := os.Stat(safeFileName)
 	if err != nil {
 		log.Println("File not found:", err)
-		msgHandler.SendRetrievalResponse(false, "File not found: "+err.Error(), 0, nil)
+		msgHandler.SendRetrievalResponse(false, "File not found: "+err.Error(), 0)
 		return
 	}
 
-	// Pre-compute checksum so we can send it with the response
+	msgHandler.SendRetrievalResponse(true, "Ready to send", uint64(info.Size()))
+
+	// Stream the file data and compute checksum as we go
 	file, err := os.Open(safeFileName)
 	if err != nil {
 		log.Println("Failed to open file:", err)
-		msgHandler.SendRetrievalResponse(false, "Failed to open file: "+err.Error(), 0, nil)
 		return
 	}
 	hash := md5.New()
-	io.Copy(hash, file)
+	w := io.MultiWriter(msgHandler, hash)
+	io.CopyN(w, file, info.Size())
+	file.Close()
+
 	checksum := hash.Sum(nil)
-	file.Close()
-
-	// Send response with size AND checksum
-	msgHandler.SendRetrievalResponse(true, "Ready to send", uint64(info.Size()), checksum)
-
-	// Stream the file data
-	file, _ = os.Open(safeFileName)
-	io.CopyN(msgHandler, file, info.Size())
-	file.Close()
+	msgHandler.SendChecksumVerification(checksum)
 
 	log.Println("File sent:", safeFileName)
 }
