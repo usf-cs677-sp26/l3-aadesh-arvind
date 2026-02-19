@@ -10,24 +10,27 @@ import (
 	"net"
 	"os"
 	"strings"
+	"path/filepath"
 )
 
 func put(msgHandler *messages.MessageHandler, fileName string) int {
 	fmt.Println("PUT", fileName)
-
 	// Get file size and make sure it exists
 	info, err := os.Stat(fileName)
 	if err != nil {
 		log.Fatalln(err)
 	}
-
+	shortName := filepath.Base(fileName)
+	
 	// Tell the server we want to store this file
-	msgHandler.SendStorageRequest(fileName, uint64(info.Size()))
+	msgHandler.SendStorageRequest(shortName, uint64(info.Size()))
 	if ok, _ := msgHandler.ReceiveResponse(); !ok {
 		return 1
 	}
+	fmt.Println("done telling server")
 
 	file, _ := os.Open(fileName)
+	fmt.Println("done opening")
 	md5 := md5.New()
 	w := io.MultiWriter(msgHandler, md5)
 	io.CopyN(w, file, info.Size()) // Checksum and transfer file at same time
@@ -43,10 +46,11 @@ func put(msgHandler *messages.MessageHandler, fileName string) int {
 	return 0
 }
 
-func get(msgHandler *messages.MessageHandler, fileName string) int {
+func get(msgHandler *messages.MessageHandler, fileName string, destDir string) int {
 	fmt.Println("GET", fileName)
 
-	file, err := os.OpenFile(fileName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
+	fullPath := filepath.Join(destDir, fileName)
+	file, err := os.OpenFile(fullPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Println(err)
 		return 1
@@ -71,6 +75,8 @@ func get(msgHandler *messages.MessageHandler, fileName string) int {
 		log.Println("Successfully retrieved file.")
 	} else {
 		log.Println("FAILED to retrieve file. Invalid checksum.")
+		file.Close()
+		os.Remove(fullPath)
 	}
 
 	return 0
@@ -111,6 +117,6 @@ func main() {
 	if action == "put" {
 		os.Exit(put(msgHandler, fileName))
 	} else if action == "get" {
-		os.Exit(get(msgHandler, fileName))
+		os.Exit(get(msgHandler, fileName, dir))
 	}
 }

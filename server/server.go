@@ -9,15 +9,31 @@ import (
 	"log"
 	"net"
 	"os"
+	"syscall"
+	"path/filepath"
 )
 
 func handleStorage(msgHandler *messages.MessageHandler, request *messages.StorageRequest) {
 	log.Println("Attempting to store", request.FileName)
-	file, err := os.OpenFile(request.FileName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
+
+	safeName := filepath.Base(request.FileName)
+	file, err := os.OpenFile(safeName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
 	if err != nil {
-		msgHandler.SendResponse(false, err.Error())
+		if os.IsExist(err) {
+			msgHandler.SendResponse(false, "File already exists")
+		}else{
+			msgHandler.SendResponse(false, err.Error())
+		}
 		msgHandler.Close()
 		return
+	}
+
+	freeSpace, err := getFreeSpace(".")
+	if err != nil {
+		msgHandler.SendResponse(false, "Failed to check disk space: " + err.Error())
+	}
+	if request.Size > freeSpace {
+		msgHandler.SendResponse(false, "Not enough disk space")
 	}
 
 	msgHandler.SendResponse(true, "Ready for data")
@@ -33,9 +49,22 @@ func handleStorage(msgHandler *messages.MessageHandler, request *messages.Storag
 
 	if util.VerifyChecksum(serverCheck, clientCheck) {
 		log.Println("Successfully stored file.")
+		msgHandler.SendResponse(true, "Checksum verification successful")
 	} else {
 		log.Println("FAILED to store file. Invalid checksum.")
+		file.Close()
+		os.Remove(request.FileName)
+		msgHandler.SendResponse(false, "Checksum verification failed")
 	}
+}
+
+func getFreeSpace(path string)(uint64, error){
+	var stat syscall.Statfs_t
+	err := syscall.Statfs(path, &stat)
+	if err != nil {
+		return 0, err
+	}
+	return stat.Bavail * uint64(stat.Bsize), nil
 }
 
 func handleRetrieval(msgHandler *messages.MessageHandler, request *messages.RetrievalRequest) {
